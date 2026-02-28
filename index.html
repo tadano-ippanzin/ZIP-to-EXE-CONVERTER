@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>GitHub Assist: ZIP to EXE Converter</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 50px; background: #f4f4f9; }
+        .drop-zone { border: 2px dashed #007bff; padding: 40px; border-radius: 10px; background: white; cursor: pointer; }
+        #status { margin-top: 20px; font-weight: bold; color: #333; }
+        button { margin-top: 20px; padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; display: none; }
+    </style>
+</head>
+<body>
+
+    <h1>📦 ZIP to EXE Converter</h1>
+    <p>マジックナンバーを変換し、独自シグネチャを付与したEXEを生成します。</p>
+
+    <div id="dropZone" class="drop-zone">
+        ZIPファイルをここにドロップ、またはクリックして選択
+    </div>
+    <input type="file" id="fileInput" accept=".zip" style="display: none;">
+
+    <div id="status"></div>
+    <button id="downloadBtn">EXEをダウンロード</button>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const status = document.getElementById('status');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let generatedBlob = null;
+
+        // 1. 雛形となるスタブEXE（中身を読み取って実行するエンジン）
+        // 本来は事前にビルドしたバイナリをBase64などで埋め込む必要があります
+        const STUB_BASE64 = "TVqQAAMAAAAEAAAA//8AALgAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAA..."; // ここにスタブのバイナリを入れる
+
+        dropZone.onclick = () => fileInput.click();
+
+        fileInput.onchange = (e) => handleFile(e.target.files[0]);
+
+        async function handleFile(file) {
+            if (!file) return;
+            status.innerText = "変換中...";
+
+            const zipArrayBuffer = await file.arrayBuffer();
+            const zipBytes = new Uint8Array(zipArrayBuffer);
+
+            // 2. マジックナンバーの変換（XOR演算で PK シグネチャを隠蔽）
+            // ZIPの先頭 50 4B 03 04 を書き換える
+            const xorKey = 0x42; // 任意のキー
+            const transformedZip = zipBytes.map(byte => byte ^ xorKey);
+
+            // 3. スタブEXEと結合
+            // 独自のシグネチャ 'GHA' (GitHub Assist) を境界線にする
+            const signature = new TextEncoder().encode("GHA_SIG");
+            const stubBytes = new Uint8Array(atob(STUB_BASE64).split("").map(c => c.charCodeAt(0)));
+            
+            const finalExe = new Uint8Array(stubBytes.length + signature.length + transformedZip.length);
+            finalExe.set(stubBytes);
+            finalExe.set(signature, stubBytes.length);
+            finalExe.set(transformedZip, stubBytes.length + signature.length);
+
+            generatedBlob = new Blob([finalExe], { type: 'application/octet-stream' });
+            
+            status.innerText = "変換完了！マジックナンバーを隠蔽しました。";
+            downloadBtn.style.display = 'inline-block';
+        }
+
+        downloadBtn.onclick = () => {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(generatedBlob);
+            a.download = "converted_app.exe";
+            a.click();
+        };
+    </script>
+</body>
+</html>
